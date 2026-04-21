@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="true">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DocScan">
-<title>DocScan to Google Sheets</title>
+<title>DocScan to Sheets</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -321,6 +321,12 @@ label{font-size:14px;font-weight:500;color:var(--gray600);display:block;margin-b
   <div id="fields-container"></div>
   <button class="raw-text-toggle" id="btn-raw-toggle">Show raw OCR text</button>
   <div class="raw-text-box" id="raw-text-box"></div>
+  <div style="padding:0 16px 8px">
+    <button class="btn" id="btn-ai-read" style="background:#faf5ff;border:1.5px solid #7c3aed;color:#7c3aed;font-size:14px;gap:6px">
+      <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:#7c3aed"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+      ✨ Read with AI (Claude)
+    </button>
+  </div>
   <div class="review-actions">
     <button class="btn btn-primary" id="btn-upload">
       <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
@@ -611,15 +617,13 @@ async function runOCR(imageDataUrl) {
   try {
     const worker = await Tesseract.createWorker('eng', 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-lang@4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
       logger: m => {
         if (m.status === 'recognizing text')
           setOcrStatus('Reading text… ' + Math.round(m.progress * 100) + '%', true);
         else if (m.status === 'loading language traineddata')
           setOcrStatus('Loading OCR model…', true);
-        else if (m.status === 'initializing tesseract')
-          setOcrStatus('Starting OCR engine…', true);
       }
     });
     setOcrStatus('Extracting text from image…', true);
@@ -691,6 +695,72 @@ function extractFields(rawText, mappings) {
     extracted[m.label] = found;
   }
   return extracted;
+}
+
+// ══════════════════════════════════════════════════════════
+// AI OCR — Claude Vision fallback
+// ══════════════════════════════════════════════════════════
+async function runAIOCR(imageDataUrl) {
+  setOcrStatus('Sending image to Claude AI…', true);
+  const btn = document.getElementById('btn-ai-read');
+  btn.disabled = true;
+  btn.textContent = '⏳ Reading…';
+
+  // Build field list for the prompt
+  const fieldList = state.config.mappings.map(m =>
+    `- "${m.label}" (look for keyword: "${m.keyword || m.label}")`
+  ).join('\n');
+
+  const prompt = `You are a document OCR assistant. Extract the following fields from this document image:\n${fieldList}\n\nRespond ONLY with a JSON object where keys are the field labels exactly as given, and values are the extracted text strings. If a field is not found, use an empty string. No explanation, only JSON.`;
+
+  // Convert dataUrl to base64
+  const base64 = imageDataUrl.split(',')[1];
+  const mediaType = imageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'AI request failed');
+
+    const raw = data.content.map(c => c.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    // Fill fields from AI result
+    document.querySelectorAll('#fields-container input[data-label]').forEach(el => {
+      const val = parsed[el.dataset.label];
+      if (val) el.value = val;
+    });
+
+    // Also store raw text
+    const allText = Object.entries(parsed).map(([k,v]) => `${k}: ${v}`).join('\n');
+    document.getElementById('raw-text-box').textContent = '[AI extracted]\n' + allText;
+    state.ocrText = allText;
+
+    setOcrStatus('✅ AI extraction complete', false);
+    snack('✨ Fields filled by Claude AI');
+  } catch(e) {
+    setOcrStatus('AI read failed: ' + e.message, false);
+    snack('AI read failed — try again');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '✨ Read with AI (Claude)';
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1015,6 +1085,11 @@ document.getElementById('file-input').addEventListener('change', e => {
 document.getElementById('btn-review-back').addEventListener('click', () => { goTo('camera'); startCamera(); });
 
 // Raw text toggle
+document.getElementById('btn-ai-read').addEventListener('click', () => {
+  if (!state.capturedImageDataUrl) { snack('No image captured yet'); return; }
+  runAIOCR(state.capturedImageDataUrl);
+});
+
 document.getElementById('btn-raw-toggle').addEventListener('click', () => {
   const box = document.getElementById('raw-text-box');
   const btn = document.getElementById('btn-raw-toggle');
