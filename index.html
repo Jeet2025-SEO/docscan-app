@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1a56db">
+<meta name="mobile-web-app-capable" content="true">
+<meta name="apple-mobile-web-app-capable" content="true">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="DocScan">
+<title>DocScan to Sheets</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --blue:#1a56db;--blue-dark:#1e429f;--blue-light:#ebf5ff;
+  --green:#057a55;--green-light:#f3faf7;
+  --red:#e02424;--red-light:#fdf2f2;
+  --amber:#b45309;--amber-light:#fffbeb;
+  --gray50:#f9fafb;--gray100:#f3f4f6;--gray200:#e5e7eb;
+  --gray400:#9ca3af;--gray600:#4b5563;--gray800:#1f2937;
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,0.1);
+}
+html,body{height:100%;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--gray800)}
+#app{height:100%;display:flex;flex-direction:column;max-width:430px;margin:0 auto;background:#fff;position:relative;overflow:hidden}
+
+/* ── screens ── */
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;background:#fff;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;overflow-x:hidden}
+.screen.active{transform:translateX(0)}
+.screen.prev{transform:translateX(-30%)}
+
+/* ── topbar ── */
+.topbar{display:flex;align-items:center;gap:8px;padding:14px 16px 12px;background:#fff;border-bottom:1px solid var(--gray200);flex-shrink:0;position:sticky;top:0;z-index:10}
+.topbar-title{font-size:17px;font-weight:600;flex:1}
+.btn-icon{width:36px;height:36px;border:none;background:transparent;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--gray600)}
+.btn-icon:active{background:var(--gray100)}
+.btn-icon svg{width:22px;height:22px;fill:currentColor}
+
+/* ── cards ── */
+.card{background:#fff;border:1px solid var(--gray200);border-radius:var(--radius);padding:16px;margin:0 16px 12px}
+.card-label{font-size:12px;font-weight:600;color:var(--gray400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+
+/* ── buttons ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:var(--radius);border:none;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s,transform .1s;width:100%}
+.btn:active{opacity:.8;transform:scale(.98)}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-outline{background:#fff;color:var(--blue);border:1.5px solid var(--blue)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-ghost{background:var(--gray100);color:var(--gray800)}
+.btn svg{width:20px;height:20px;fill:currentColor}
+.btn-sm{height:36px;font-size:13px;border-radius:8px;padding:0 14px;width:auto}
+
+/* ── form ── */
+input[type=text],input[type=url],textarea,select{width:100%;border:1px solid var(--gray200);border-radius:8px;padding:10px 12px;font-size:15px;color:var(--gray800);background:#fff;outline:none;font-family:inherit}
+input[type=text]:focus,input[type=url]:focus,textarea:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,86,219,.1)}
+label{font-size:14px;font-weight:500;color:var(--gray600);display:block;margin-bottom:6px}
+
+/* ── badge ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
+.badge-blue{background:var(--blue-light);color:var(--blue-dark)}
+.badge-green{background:var(--green-light);color:var(--green)}
+.badge-red{background:var(--red-light);color:var(--red)}
+.badge-amber{background:var(--amber-light);color:var(--amber)}
+
+/* ── progress ── */
+.progress-bar{height:4px;background:var(--gray200);border-radius:2px;overflow:hidden;margin:8px 0}
+.progress-bar-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s ease}
+
+/* ── HOME SCREEN ── */
+#screen-home{background:var(--gray50)}
+.home-header{padding:24px 16px 8px;background:var(--gray50)}
+.home-logo{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.home-logo-icon{width:40px;height:40px;background:var(--blue);border-radius:10px;display:flex;align-items:center;justify-content:center}
+.home-logo-icon svg{width:24px;height:24px;fill:#fff}
+.home-logo h1{font-size:20px;font-weight:700;color:var(--gray800)}
+.home-logo p{font-size:13px;color:var(--gray400)}
+.scan-btn-wrap{padding:16px}
+.scan-btn-big{height:72px;border-radius:16px;font-size:18px;background:var(--blue);color:#fff;border:none;width:100%;display:flex;align-items:center;justify-content:center;gap:12px;cursor:pointer;transition:transform .1s,box-shadow .1s;box-shadow:0 4px 14px rgba(26,86,219,.35)}
+.scan-btn-big:active{transform:scale(.97);box-shadow:0 2px 8px rgba(26,86,219,.25)}
+.scan-btn-big svg{width:28px;height:28px;fill:#fff}
+.status-row{display:flex;gap:8px;padding:0 16px 16px}
+.status-chip{flex:1;background:#fff;border:1px solid var(--gray200);border-radius:10px;padding:10px 12px;font-size:13px}
+.status-chip-label{color:var(--gray400);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.status-chip-val{font-weight:600;color:var(--gray800);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.action-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 16px}
+.action-btn{background:#fff;border:1px solid var(--gray200);border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;cursor:pointer}
+.action-btn:active{background:var(--gray100)}
+.action-btn svg{width:22px;height:22px}
+.action-btn span{font-size:14px;font-weight:600;color:var(--gray800)}
+.action-btn small{font-size:12px;color:var(--gray400)}
+
+/* ── CAMERA SCREEN ── */
+#screen-camera{background:#000;overflow:hidden}
+#video{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.camera-ui{position:absolute;inset:0;display:flex;flex-direction:column;pointer-events:none}
+.camera-top{padding:16px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,0,.6),transparent);pointer-events:all}
+.camera-frame{flex:1;display:flex;align-items:center;justify-content:center;padding:32px}
+.frame-box{width:100%;max-width:320px;aspect-ratio:.75;border:2px solid rgba(255,255,255,.7);border-radius:12px;position:relative}
+.frame-corner{position:absolute;width:20px;height:20px;border-color:#fff;border-style:solid}
+.frame-corner.tl{top:-2px;left:-2px;border-width:3px 0 0 3px;border-radius:4px 0 0 0}
+.frame-corner.tr{top:-2px;right:-2px;border-width:3px 3px 0 0;border-radius:0 4px 0 0}
+.frame-corner.bl{bottom:-2px;left:-2px;border-width:0 0 3px 3px;border-radius:0 0 0 4px}
+.frame-corner.br{bottom:-2px;right:-2px;border-width:0 3px 3px 0;border-radius:0 0 4px 0}
+.camera-hint{color:rgba(255,255,255,.8);font-size:14px;text-align:center}
+.camera-bottom{padding:24px 32px 40px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to top,rgba(0,0,0,.7),transparent);pointer-events:all}
+.shutter{width:72px;height:72px;border-radius:50%;background:#fff;border:4px solid rgba(255,255,255,.4);cursor:pointer;transition:transform .1s}
+.shutter:active{transform:scale(.9)}
+.cam-side-btn{width:48px;height:48px;background:rgba(255,255,255,.15);border:none;border-radius:50%;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cam-side-btn svg{width:22px;height:22px;fill:#fff}
+#canvas{display:none}
+.camera-status{position:absolute;bottom:140px;left:0;right:0;text-align:center;color:#fff;font-size:14px;background:rgba(0,0,0,.5);padding:8px;display:none}
+
+/* ── REVIEW SCREEN ── */
+#screen-review .preview-img{width:100%;max-height:200px;object-fit:cover;background:var(--gray100)}
+.ocr-status-bar{padding:12px 16px;display:flex;align-items:center;gap:10px;background:var(--blue-light);border-bottom:1px solid #c3ddfd}
+.ocr-status-bar svg{width:20px;height:20px;fill:var(--blue);flex-shrink:0}
+.ocr-status-bar span{font-size:14px;color:var(--blue-dark);font-weight:500}
+#fields-container{padding:16px}
+.field-row{margin-bottom:14px}
+.field-row label{display:flex;justify-content:space-between;align-items:center}
+.field-col-badge{font-size:11px;font-weight:600;color:var(--blue);background:var(--blue-light);padding:2px 8px;border-radius:4px}
+.raw-text-toggle{background:none;border:1px solid var(--gray200);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--gray600);cursor:pointer;margin:0 16px 12px;width:calc(100% - 32px)}
+.raw-text-box{margin:0 16px 12px;background:var(--gray50);border:1px solid var(--gray200);border-radius:8px;padding:12px;font-size:12px;color:var(--gray600);font-family:monospace;white-space:pre-wrap;word-break:break-all;display:none;max-height:160px;overflow-y:auto}
+.review-actions{padding:16px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--gray200);background:#fff;position:sticky;bottom:0}
+.review-row{display:flex;gap:8px}
+
+/* ── RESULT SCREEN ── */
+#screen-result{justify-content:center;align-items:center;padding:32px}
+.result-icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.result-icon.success{background:var(--green-light)}
+.result-icon.queued{background:var(--amber-light)}
+.result-icon svg{width:36px;height:36px}
+.result-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:8px}
+.result-sub{font-size:15px;color:var(--gray400);text-align:center;margin-bottom:32px;line-height:1.5}
+.result-actions{width:100%;display:flex;flex-direction:column;gap:10px}
+
+/* ── CONFIG SCREEN ── */
+#screen-config .content{padding:16px;display:flex;flex-direction:column;gap:16px}
+.help-box{background:var(--blue-light);border-radius:10px;padding:12px;font-size:13px;color:var(--blue-dark);line-height:1.6}
+.help-box code{background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px;font-size:12px}
+.mapping-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.mapping-row input{flex:1;min-width:0}
+.mapping-row .col-in{width:52px;flex:none;text-align:center}
+.mapping-row .key-in{flex:1.2}
+.btn-remove{width:32px;height:32px;flex:none;background:var(--red-light);color:var(--red);border:none;border-radius:8px;cursor:pointer;font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
+.btn-remove:active{opacity:.7}
+.mapping-hdr{display:flex;gap:6px;margin-bottom:4px;padding-right:38px}
+.mapping-hdr span{font-size:11px;font-weight:600;color:var(--gray400);text-transform:uppercase}
+.mapping-hdr .h1{flex:1}
+.mapping-hdr .h2{width:52px}
+.mapping-hdr .h3{flex:1.2}
+
+/* ── HISTORY SCREEN ── */
+#history-list{padding:12px 16px;display:flex;flex-direction:column;gap:10px}
+.hist-card{background:#fff;border:1px solid var(--gray200);border-radius:var(--radius);overflow:hidden;display:flex;gap:0}
+.hist-thumb{width:64px;height:80px;object-fit:cover;flex-shrink:0;background:var(--gray100)}
+.hist-body{flex:1;padding:10px 12px;min-width:0}
+.hist-date{font-size:12px;color:var(--gray400);margin-bottom:4px}
+.hist-fields{font-size:13px;color:var(--gray800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}
+.hist-foot{display:flex;align-items:center;justify-content:space-between}
+.hist-sheet{font-size:11px;color:var(--gray400)}
+.empty-state{padding:64px 32px;text-align:center;color:var(--gray400)}
+.empty-state svg{width:56px;height:56px;fill:var(--gray200);margin-bottom:16px}
+.empty-state p{font-size:15px}
+
+/* ── SIGN-IN OVERLAY ── */
+#signin-overlay{position:absolute;inset:0;background:var(--gray50);z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:16px}
+.signin-logo{width:72px;height:72px;background:var(--blue);border-radius:20px;display:flex;align-items:center;justify-content:center;margin-bottom:8px}
+.signin-logo svg{width:40px;height:40px;fill:#fff}
+.signin-title{font-size:24px;font-weight:700;text-align:center}
+.signin-sub{font-size:15px;color:var(--gray400);text-align:center;line-height:1.6;margin-bottom:8px}
+.google-btn{display:flex;align-items:center;gap:12px;height:52px;background:#fff;border:1.5px solid var(--gray200);border-radius:var(--radius);padding:0 20px;cursor:pointer;font-size:16px;font-weight:600;color:var(--gray800);width:100%;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.google-btn:active{background:var(--gray50)}
+
+/* ── SNACKBAR ── */
+#snackbar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#1f2937;color:#fff;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:500;z-index:1000;transition:transform .3s;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.2);pointer-events:none}
+#snackbar.show{transform:translateX(-50%) translateY(0)}
+
+/* ── LOADER ── */
+.spinner{width:24px;height:24px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+.spinner-blue{border-color:rgba(26,86,219,.2);border-top-color:var(--blue)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── INSTALL BANNER ── */
+#install-banner{background:var(--blue);color:#fff;padding:12px 16px;display:none;align-items:center;gap:10px;flex-shrink:0}
+#install-banner p{flex:1;font-size:14px}
+#install-banner button{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── INSTALL BANNER ── -->
+<div id="install-banner">
+  <p>Install DocScan as an app</p>
+  <button id="install-btn">Install</button>
+  <button onclick="document.getElementById('install-banner').style.display='none'" style="background:transparent;border:none;color:rgba(255,255,255,.6);font-size:20px;cursor:pointer;padding:0 4px">×</button>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     HOME SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-home" class="screen active">
+  <div class="home-header">
+    <div class="home-logo">
+      <div class="home-logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zM8 15h8v2H8v-2zm0-4h8v2H8v-2z"/></svg>
+      </div>
+      <div>
+        <h1>DocScan</h1>
+        <p>Scan documents → Google Sheets</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="scan-btn-wrap">
+    <button class="scan-btn-big" id="btn-start-scan">
+      <svg viewBox="0 0 24 24"><path d="M12 12m-3.2 0a3.2 3.2 0 1 1 6.4 0a3.2 3.2 0 1 1-6.4 0M9 2L7.17 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.83L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+      Scan Document
+    </button>
+  </div>
+
+  <div class="status-row">
+    <div class="status-chip">
+      <div class="status-chip-label">Account</div>
+      <div class="status-chip-val" id="chip-account">Not signed in</div>
+    </div>
+    <div class="status-chip">
+      <div class="status-chip-label">Sheet</div>
+      <div class="status-chip-val" id="chip-sheet">Not configured</div>
+    </div>
+  </div>
+
+  <div class="action-grid">
+    <button class="action-btn" id="btn-nav-config">
+      <svg viewBox="0 0 24 24" style="color:#6366f1;fill:#6366f1"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      <span>Configure</span>
+      <small>Set up Google Sheet</small>
+    </button>
+    <button class="action-btn" id="btn-nav-history">
+      <svg viewBox="0 0 24 24" style="color:#0891b2;fill:#0891b2"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+      <span>History</span>
+      <small id="history-count-label">0 scans</small>
+    </button>
+    <button class="action-btn" id="btn-sync">
+      <svg viewBox="0 0 24 24" style="color:#059669;fill:#059669"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+      <span>Sync</span>
+      <small id="pending-label">0 pending</small>
+    </button>
+    <button class="action-btn" id="btn-signout">
+      <svg viewBox="0 0 24 24" style="color:#dc2626;fill:#dc2626"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+      <span>Sign out</span>
+      <small id="signin-email-label">—</small>
+    </button>
+  </div>
+
+  <div style="padding:0 16px 24px">
+    <p style="font-size:12px;color:var(--gray400);text-align:center;line-height:1.7">
+      🔒 OCR runs fully offline on your device.<br>Internet is only needed to upload to Google Sheets.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     CAMERA SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-camera" class="screen">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="camera-ui">
+    <div class="camera-top">
+      <button class="cam-side-btn" id="btn-cam-back">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <div style="flex:1;text-align:center;color:#fff;font-size:15px;font-weight:600">Scan Document</div>
+      <button class="cam-side-btn" id="btn-flash">
+        <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+      </button>
+    </div>
+    <div class="camera-frame">
+      <div>
+        <div class="frame-box">
+          <div class="frame-corner tl"></div>
+          <div class="frame-corner tr"></div>
+          <div class="frame-corner bl"></div>
+          <div class="frame-corner br"></div>
+        </div>
+        <p class="camera-hint" style="margin-top:12px">Align document within frame</p>
+      </div>
+    </div>
+    <div id="camera-status" class="camera-status"></div>
+    <div class="camera-bottom">
+      <button class="cam-side-btn" id="btn-gallery" title="Choose from gallery">
+        <svg viewBox="0 0 24 24"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>
+      </button>
+      <button class="shutter" id="btn-capture"></button>
+      <div style="width:48px"></div>
+    </div>
+  </div>
+  <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none">
+</div>
+
+<!-- ══════════════════════════════════════════════
+     REVIEW SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-review" class="screen">
+  <div class="topbar">
+    <button class="btn-icon" id="btn-review-back">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+    <span class="topbar-title">Review & Upload</span>
+    <span id="review-status-badge"></span>
+  </div>
+  <img id="preview-img" class="preview-img" alt="Scanned document">
+  <div class="ocr-status-bar" id="ocr-status-bar">
+    <div class="spinner spinner-blue" id="ocr-spinner"></div>
+    <span id="ocr-status-text">Running OCR… (offline)</span>
+  </div>
+  <div id="fields-container"></div>
+  <button class="raw-text-toggle" id="btn-raw-toggle">Show raw OCR text</button>
+  <div class="raw-text-box" id="raw-text-box"></div>
+  <div class="review-actions">
+    <button class="btn btn-primary" id="btn-upload">
+      <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+      Upload to Sheet
+    </button>
+    <div class="review-row">
+      <button class="btn btn-ghost" id="btn-rescan" style="flex:1">Rescan</button>
+      <button class="btn btn-ghost" id="btn-discard" style="flex:1;color:var(--red)">Discard</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     RESULT SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-result" class="screen">
+  <div id="result-icon-wrap" class="result-icon success">
+    <svg id="result-icon-svg" viewBox="0 0 24 24" style="fill:var(--green)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+  </div>
+  <h2 class="result-title" id="result-title">Uploaded!</h2>
+  <p class="result-sub" id="result-sub">The data was added to your Google Sheet.</p>
+  <div class="result-actions">
+    <button class="btn btn-primary" id="btn-scan-another">
+      <svg viewBox="0 0 24 24"><path d="M12 12m-3.2 0a3.2 3.2 0 1 1 6.4 0a3.2 3.2 0 1 1-6.4 0M9 2L7.17 4H4C2.9 4 2 4.9 2 6v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.83L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+      Scan Another
+    </button>
+    <button class="btn btn-outline" id="btn-go-home">Back to Home</button>
+    <button class="btn btn-ghost" id="btn-view-history">View History</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     CONFIG SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-config" class="screen">
+  <div class="topbar">
+    <button class="btn-icon" id="btn-config-back">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+    <span class="topbar-title">Configure Sheet</span>
+    <button class="btn btn-primary btn-sm" id="btn-config-save">Save</button>
+  </div>
+  <div class="content">
+    <div class="help-box">
+      <strong>How to get the Spreadsheet ID:</strong><br>
+      Open your Google Sheet → copy the ID from the URL:<br>
+      <code>docs.google.com/spreadsheets/d/<strong>SPREADSHEET_ID</strong>/edit</code>
+    </div>
+    <div>
+      <label>Spreadsheet ID</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="cfg-sheet-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+        <button class="btn btn-outline btn-sm" id="btn-verify" style="white-space:nowrap;padding:0 14px;width:auto;height:40px">Verify</button>
+      </div>
+      <p id="verify-result" style="font-size:13px;margin-top:6px;color:var(--gray400)"></p>
+    </div>
+    <div>
+      <label>Sheet / Tab name</label>
+      <input type="text" id="cfg-sheet-name" placeholder="Sheet1" value="Sheet1">
+    </div>
+    <div>
+      <label>Column Mappings</label>
+      <div class="mapping-hdr">
+        <span class="h1">Field label</span>
+        <span class="h2" style="text-align:center">Column</span>
+        <span class="h3">OCR keyword</span>
+      </div>
+      <div id="mappings-list"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-add-mapping" style="margin-top:6px;width:auto;padding:0 16px">+ Add column</button>
+    </div>
+    <div class="help-box" style="background:#f0fdf4;color:#166534">
+      <strong>OCR keyword tips:</strong><br>
+      Enter the word that appears <em>next to</em> the value in your document. E.g. if the doc says "Invoice No: 1234" enter keyword "invoice". Leave blank to fill manually.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     HISTORY SCREEN
+══════════════════════════════════════════════ -->
+<div id="screen-history" class="screen">
+  <div class="topbar">
+    <button class="btn-icon" id="btn-history-back">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+    </button>
+    <span class="topbar-title">Scan History</span>
+    <button class="btn-icon" id="btn-clear-history" title="Clear history" style="color:var(--red)">
+      <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    </button>
+  </div>
+  <div id="history-list"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     SIGN-IN OVERLAY
+══════════════════════════════════════════════ -->
+<div id="signin-overlay">
+  <div class="signin-logo">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+  </div>
+  <h2 class="signin-title">DocScan to Sheets</h2>
+  <p class="signin-sub">Scan any document with your camera. OCR runs offline. Data goes straight to your Google Sheet.</p>
+  <button class="google-btn" id="btn-google-signin">
+    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    Sign in with Google
+  </button>
+  <p style="font-size:12px;color:var(--gray400);text-align:center;line-height:1.6">
+    Sign-in is only used to write data to your Google Sheet.<br>No data is stored externally.
+  </p>
+</div>
+
+<div id="snackbar"></div>
+</div><!-- #app -->
+
+<script>
+// ══════════════════════════════════════════════════════════
+// CONFIG — Replace CLIENT_ID with your Google OAuth client
+// ══════════════════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = '498975597015-3ef9khl142schjpfj9ak6f7s5av3i6lb.apps.googleusercontent.com';
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
+
+// ══════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════
+const state = {
+  screen: 'home',
+  accessToken: null,
+  userEmail: null,
+  capturedImageDataUrl: null,
+  ocrText: '',
+  config: loadConfig(),
+  history: loadHistory(),
+  pendingQueue: loadQueue(),
+  flashOn: false,
+  stream: null,
+};
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem('dss_config') || 'null') || {
+    spreadsheetId: '', sheetName: 'Sheet1',
+    mappings: [
+      { label: 'Date', column: 'A', keyword: 'date' },
+      { label: 'Amount', column: 'B', keyword: 'amount' },
+      { label: 'Description', column: 'C', keyword: '' },
+    ]
+  }; } catch { return { spreadsheetId:'', sheetName:'Sheet1', mappings:[] }; }
+}
+function saveConfig() { localStorage.setItem('dss_config', JSON.stringify(state.config)); }
+function loadHistory() { try { return JSON.parse(localStorage.getItem('dss_history') || '[]'); } catch { return []; } }
+function saveHistory() { localStorage.setItem('dss_history', JSON.stringify(state.history.slice(0,100))); }
+function loadQueue() { try { return JSON.parse(localStorage.getItem('dss_queue') || '[]'); } catch { return []; } }
+function saveQueue() { localStorage.setItem('dss_queue', JSON.stringify(state.pendingQueue)); }
+
+// ══════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════
+function goTo(id) {
+  const prev = document.querySelector('.screen.active');
+  if (prev) { prev.classList.add('prev'); prev.classList.remove('active'); }
+  const next = document.getElementById('screen-' + id);
+  next.classList.remove('prev');
+  next.classList.add('active');
+  setTimeout(() => { document.querySelectorAll('.screen.prev').forEach(s => s.classList.remove('prev')); }, 350);
+  state.screen = id;
+}
+
+// ══════════════════════════════════════════════════════════
+// SNACKBAR
+// ══════════════════════════════════════════════════════════
+let snackTimer;
+function snack(msg, duration = 3000) {
+  const el = document.getElementById('snackbar');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(snackTimer);
+  snackTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+// ══════════════════════════════════════════════════════════
+// GOOGLE OAUTH (implicit flow — no server needed)
+// ══════════════════════════════════════════════════════════
+function signInWithGoogle() {
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: window.location.origin + window.location.pathname,
+    response_type: 'token',
+    scope: SHEETS_SCOPE + ' email profile',
+    include_granted_scopes: 'true',
+    state: 'signin',
+  });
+  window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+
+function handleOAuthCallback() {
+  const hash = window.location.hash.substring(1);
+  if (!hash) return false;
+  const params = new URLSearchParams(hash);
+  const token = params.get('access_token');
+  if (!token) return false;
+  state.accessToken = token;
+  const expiry = Date.now() + parseInt(params.get('expires_in') || '3600') * 1000;
+  localStorage.setItem('dss_token', token);
+  localStorage.setItem('dss_token_expiry', expiry);
+  history.replaceState(null, '', window.location.pathname);
+  fetchUserInfo();
+  return true;
+}
+
+function loadStoredToken() {
+  const token = localStorage.getItem('dss_token');
+  const expiry = parseInt(localStorage.getItem('dss_token_expiry') || '0');
+  if (token && expiry > Date.now() + 60000) {
+    state.accessToken = token;
+    state.userEmail = localStorage.getItem('dss_email') || '';
+    return true;
+  }
+  return false;
+}
+
+async function fetchUserInfo() {
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + state.accessToken }
+    });
+    const info = await r.json();
+    state.userEmail = info.email;
+    localStorage.setItem('dss_email', info.email);
+    updateHomeUI();
+    hideSignInOverlay();
+  } catch {
+    hideSignInOverlay();
+  }
+}
+
+function signOut() {
+  state.accessToken = null; state.userEmail = null;
+  localStorage.removeItem('dss_token');
+  localStorage.removeItem('dss_token_expiry');
+  localStorage.removeItem('dss_email');
+  showSignInOverlay();
+  updateHomeUI();
+}
+
+function showSignInOverlay() { document.getElementById('signin-overlay').style.display = 'flex'; }
+function hideSignInOverlay() { document.getElementById('signin-overlay').style.display = 'none'; }
+
+// ══════════════════════════════════════════════════════════
+// CAMERA
+// ══════════════════════════════════════════════════════════
+async function startCamera() {
+  try {
+    const constraints = {
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    };
+    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('video');
+    video.srcObject = state.stream;
+    await video.play();
+  } catch (e) {
+    snack('Camera access denied. Use gallery instead.');
+  }
+}
+
+function stopCamera() {
+  if (state.stream) { state.stream.getTracks().forEach(t => t.stop()); state.stream = null; }
+}
+
+function captureFrame() {
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  canvas.width = video.videoWidth || 1280;
+  canvas.height = video.videoHeight || 720;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+
+function setCameraStatus(msg) {
+  const el = document.getElementById('camera-status');
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════
+// OCR (Tesseract.js — 100% offline after first load)
+// ══════════════════════════════════════════════════════════
+async function runOCR(imageDataUrl) {
+  setOcrStatus('Initialising OCR engine…', true);
+  try {
+    const worker = await Tesseract.createWorker('eng', 1, {
+      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-lang@4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
+      logger: m => {
+        if (m.status === 'recognizing text')
+          setOcrStatus('Reading text… ' + Math.round(m.progress * 100) + '%', true);
+        else if (m.status === 'loading language traineddata')
+          setOcrStatus('Loading OCR model…', true);
+      }
+    });
+    setOcrStatus('Extracting text from image…', true);
+    const { data } = await worker.recognize(imageDataUrl);
+    await worker.terminate();
+    setOcrStatus('✓ OCR complete', false);
+    return data.text;
+  } catch (e) {
+    setOcrStatus('OCR failed — try again', false);
+    throw e;
+  }
+}
+
+function setOcrStatus(msg, loading) {
+  document.getElementById('ocr-status-text').textContent = msg;
+  document.getElementById('ocr-spinner').style.display = loading ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════════════════════
+// FIELD EXTRACTION
+// ══════════════════════════════════════════════════════════
+function extractFields(rawText, mappings) {
+  const extracted = {};
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Auto patterns
+  const patterns = {
+    date: /\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{2}[\/\-]\d{2}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{2,4})\b/i,
+    amount: /[₹$£€]?\s*\d{1,3}(?:[,\s]\d{3})*(?:\.\d{2})?/,
+    phone: /\b(\+?\d[\d\s\-()]{8,14}\d)\b/,
+    email: /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/,
+    invoice: /(?:invoice|inv|receipt|ref|no|number|#)[.\s#:]*([A-Z0-9\-\/]{3,20})/i,
+  };
+
+  for (const m of mappings) {
+    let found = '';
+    const kw = (m.keyword || '').toLowerCase();
+
+    if (kw) {
+      // Keyword strategy: find line containing keyword, extract value after separator
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i].toLowerCase();
+        if (l.includes(kw)) {
+          const orig = lines[i];
+          const sepMatch = orig.match(/[:=\-|]\s*(.+)/);
+          if (sepMatch) { found = sepMatch[1].trim(); break; }
+          if (i + 1 < lines.length && lines[i+1].length < 60) { found = lines[i+1]; break; }
+        }
+      }
+    }
+
+    // Auto pattern fallback
+    if (!found) {
+      const kwLower = kw.toLowerCase();
+      if (kwLower.includes('date') || m.label.toLowerCase().includes('date'))
+        found = (rawText.match(patterns.date) || [''])[0];
+      else if (kwLower.includes('amount') || kwLower.includes('total') || m.label.toLowerCase().includes('amount'))
+        found = (rawText.match(patterns.amount) || [''])[0].trim();
+      else if (kwLower.includes('phone') || kwLower.includes('mobile'))
+        found = (rawText.match(patterns.phone) || [''])[0];
+      else if (kwLower.includes('email'))
+        found = (rawText.match(patterns.email) || [''])[0];
+      else if (kwLower.includes('invoice') || kwLower.includes('ref')) {
+        const m2 = rawText.match(patterns.invoice);
+        found = m2 ? m2[1] || m2[0] : '';
+      }
+    }
+
+    extracted[m.label] = found;
+  }
+  return extracted;
+}
+
+// ══════════════════════════════════════════════════════════
+// REVIEW SCREEN
+// ══════════════════════════════════════════════════════════
+async function openReview(imageDataUrl) {
+  state.capturedImageDataUrl = imageDataUrl;
+  document.getElementById('preview-img').src = imageDataUrl;
+  document.getElementById('raw-text-box').textContent = '';
+  document.getElementById('raw-text-box').style.display = 'none';
+  document.getElementById('btn-raw-toggle').textContent = 'Show raw OCR text';
+  renderFieldsLoading();
+  goTo('review');
+
+  try {
+    const text = await runOCR(imageDataUrl);
+    state.ocrText = text;
+    document.getElementById('raw-text-box').textContent = text || '(no text detected)';
+    renderFields(text);
+  } catch (e) {
+    setOcrStatus('OCR failed. You can still fill fields manually.', false);
+    renderFields('');
+  }
+}
+
+function renderFieldsLoading() {
+  const container = document.getElementById('fields-container');
+  container.innerHTML = state.config.mappings.map(() =>
+    '<div class="field-row"><div style="height:20px;background:#f3f4f6;border-radius:4px;margin-bottom:8px;width:40%"></div><div style="height:40px;background:#f3f4f6;border-radius:8px"></div></div>'
+  ).join('');
+}
+
+function renderFields(rawText) {
+  const extracted = extractFields(rawText, state.config.mappings);
+  const container = document.getElementById('fields-container');
+  container.innerHTML = '';
+
+  if (!state.config.mappings.length) {
+    container.innerHTML = '<div style="padding:16px;color:var(--gray400);text-align:center;font-size:14px">No columns configured.<br><button onclick="goTo(\'config\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-size:14px;margin-top:8px">Configure sheet →</button></div>';
+    return;
+  }
+
+  state.config.mappings.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'field-row';
+    div.innerHTML = `
+      <label>
+        ${m.label}
+        <span class="field-col-badge">Col ${m.column}</span>
+      </label>
+      <input type="text" data-label="${m.label}" value="${escHtml(extracted[m.label] || '')}" placeholder="Enter value…">
+    `;
+    container.appendChild(div);
+  });
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function getFieldValues() {
+  const vals = {};
+  document.querySelectorAll('#fields-container input[data-label]').forEach(el => {
+    vals[el.dataset.label] = el.value.trim();
+  });
+  return vals;
+}
+
+// ══════════════════════════════════════════════════════════
+// GOOGLE SHEETS API
+// ══════════════════════════════════════════════════════════
+function colLetterToIndex(col) {
+  let n = 0;
+  for (const c of col.toUpperCase()) n = n * 26 + c.charCodeAt(0) - 64;
+  return n - 1;
+}
+
+function buildRowArray(fieldValues) {
+  const mappings = state.config.mappings;
+  if (!mappings.length) return [];
+  const maxIdx = Math.max(...mappings.map(m => colLetterToIndex(m.column)));
+  const row = new Array(maxIdx + 1).fill('');
+  mappings.forEach(m => { row[colLetterToIndex(m.column)] = fieldValues[m.label] || ''; });
+  return row;
+}
+
+async function appendToSheet(fieldValues) {
+  const { spreadsheetId, sheetName } = state.config;
+  const row = buildRowArray(fieldValues);
+  const range = `'${sheetName}'!A:A`;
+  const body = { values: [row] };
+
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + state.accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error(err.error?.message || 'Sheets API error');
+  }
+  return await resp.json();
+}
+
+async function verifySpreadsheet(id) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(id)}?fields=properties.title,sheets.properties.title`;
+  const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + state.accessToken } });
+  if (!resp.ok) throw new Error('Not found or no permission');
+  return await resp.json();
+}
+
+// ══════════════════════════════════════════════════════════
+// OFFLINE QUEUE
+// ══════════════════════════════════════════════════════════
+function queueUpload(fieldValues) {
+  const item = {
+    id: Date.now(),
+    spreadsheetId: state.config.spreadsheetId,
+    sheetName: state.config.sheetName,
+    mappings: state.config.mappings,
+    fieldValues,
+    imageDataUrl: state.capturedImageDataUrl,
+    timestamp: Date.now(),
+  };
+  state.pendingQueue.push(item);
+  saveQueue();
+  addToHistory(fieldValues, 'pending');
+  updatePendingLabel();
+}
+
+async function syncQueue() {
+  if (!state.accessToken || !navigator.onLine) return;
+  const pending = [...state.pendingQueue];
+  if (!pending.length) return;
+  snack(`Syncing ${pending.length} queued upload(s)…`);
+  let ok = 0;
+  for (const item of pending) {
+    try {
+      const origConfig = state.config;
+      state.config = { spreadsheetId: item.spreadsheetId, sheetName: item.sheetName, mappings: item.mappings };
+      await appendToSheet(item.fieldValues);
+      state.config = origConfig;
+      state.pendingQueue = state.pendingQueue.filter(q => q.id !== item.id);
+      saveQueue(); ok++;
+    } catch (e) {
+      console.warn('Queue sync failed for item', item.id, e);
+    }
+  }
+  updatePendingLabel();
+  if (ok) snack(`✓ Synced ${ok} upload(s) to Google Sheets`);
+}
+
+// ══════════════════════════════════════════════════════════
+// HISTORY
+// ══════════════════════════════════════════════════════════
+function addToHistory(fieldValues, status) {
+  state.history.unshift({
+    id: Date.now(),
+    fields: fieldValues,
+    imageDataUrl: state.capturedImageDataUrl,
+    sheetName: state.config.sheetName,
+    spreadsheetId: state.config.spreadsheetId,
+    timestamp: Date.now(),
+    status,
+  });
+  saveHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!state.history.length) {
+    list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg><p>No scans yet</p></div>`;
+    return;
+  }
+  list.innerHTML = state.history.map(h => {
+    const fields = Object.entries(h.fields || {}).slice(0,3).map(([k,v]) => `${k}: ${v}`).join(' · ') || '(no fields)';
+    const dt = new Date(h.timestamp).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    const statusBadge = h.status === 'success'
+      ? '<span class="badge badge-green">✓ Uploaded</span>'
+      : h.status === 'pending'
+      ? '<span class="badge badge-amber">⏳ Pending</span>'
+      : '<span class="badge badge-red">✗ Failed</span>';
+    return `
+      <div class="hist-card">
+        ${h.imageDataUrl ? `<img class="hist-thumb" src="${h.imageDataUrl}" alt="">` : `<div class="hist-thumb" style="display:flex;align-items:center;justify-content:center;color:var(--gray400)">?</div>`}
+        <div class="hist-body">
+          <div class="hist-date">${dt}</div>
+          <div class="hist-fields">${escHtml(fields)}</div>
+          <div class="hist-foot">
+            <span class="hist-sheet">${escHtml(h.sheetName || '')}</span>
+            ${statusBadge}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// CONFIG SCREEN
+// ══════════════════════════════════════════════════════════
+function renderConfigScreen() {
+  document.getElementById('cfg-sheet-id').value = state.config.spreadsheetId || '';
+  document.getElementById('cfg-sheet-name').value = state.config.sheetName || 'Sheet1';
+  renderMappings();
+}
+
+function renderMappings() {
+  const list = document.getElementById('mappings-list');
+  list.innerHTML = '';
+  state.config.mappings.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.innerHTML = `
+      <input class="lbl-in" type="text" placeholder="e.g. Invoice No" value="${escHtml(m.label)}" data-i="${i}" data-f="label">
+      <input class="col-in" type="text" placeholder="A" value="${escHtml(m.column)}" data-i="${i}" data-f="column" maxlength="3">
+      <input class="key-in" type="text" placeholder="keyword" value="${escHtml(m.keyword)}" data-i="${i}" data-f="keyword">
+      <button class="btn-remove" data-i="${i}">×</button>`;
+    list.appendChild(row);
+  });
+
+  list.querySelectorAll('input').forEach(el => {
+    el.addEventListener('input', () => {
+      const i = +el.dataset.i, f = el.dataset.f;
+      state.config.mappings[i][f] = el.value;
+    });
+  });
+  list.querySelectorAll('.btn-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.config.mappings.splice(+btn.dataset.i, 1);
+      renderMappings();
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// HOME UI
+// ══════════════════════════════════════════════════════════
+function updateHomeUI() {
+  document.getElementById('chip-account').textContent = state.userEmail || 'Not signed in';
+  const cfg = state.config;
+  document.getElementById('chip-sheet').textContent = cfg.spreadsheetId
+    ? (cfg.sheetName || 'Sheet1')
+    : 'Not configured';
+  document.getElementById('signin-email-label').textContent = state.userEmail || '—';
+  updatePendingLabel();
+  updateHistoryLabel();
+}
+
+function updatePendingLabel() {
+  const n = state.pendingQueue.length;
+  document.getElementById('pending-label').textContent = n ? `${n} pending upload${n>1?'s':''}` : '0 pending';
+}
+
+function updateHistoryLabel() {
+  const n = state.history.length;
+  document.getElementById('history-count-label').textContent = `${n} scan${n!==1?'s':''}`;
+}
+
+// ══════════════════════════════════════════════════════════
+// PWA INSTALL
+// ══════════════════════════════════════════════════════════
+let deferredInstall;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault(); deferredInstall = e;
+  document.getElementById('install-banner').style.display = 'flex';
+});
+document.getElementById('install-btn').addEventListener('click', async () => {
+  if (!deferredInstall) return;
+  deferredInstall.prompt();
+  const { outcome } = await deferredInstall.userChoice;
+  if (outcome === 'accepted') document.getElementById('install-banner').style.display = 'none';
+});
+
+// ══════════════════════════════════════════════════════════
+// EVENT WIRING
+// ══════════════════════════════════════════════════════════
+document.getElementById('btn-google-signin').addEventListener('click', signInWithGoogle);
+document.getElementById('btn-signout').addEventListener('click', signOut);
+
+// Home → Camera
+document.getElementById('btn-start-scan').addEventListener('click', () => {
+  if (!state.accessToken) { snack('Please sign in first'); return; }
+  if (!state.config.spreadsheetId) { snack('Please configure a sheet first'); goTo('config'); return; }
+  goTo('camera');
+  startCamera();
+});
+
+// Camera back
+document.getElementById('btn-cam-back').addEventListener('click', () => {
+  stopCamera(); goTo('home');
+});
+
+// Capture button
+document.getElementById('btn-capture').addEventListener('click', () => {
+  setCameraStatus('Capturing…');
+  const dataUrl = captureFrame();
+  stopCamera();
+  openReview(dataUrl);
+});
+
+// Flash toggle
+document.getElementById('btn-flash').addEventListener('click', () => {
+  state.flashOn = !state.flashOn;
+  if (state.stream) {
+    const track = state.stream.getVideoTracks()[0];
+    track.applyConstraints({ advanced: [{ torch: state.flashOn }] }).catch(() => {});
+  }
+  document.getElementById('btn-flash').style.background = state.flashOn ? 'rgba(255,220,0,.3)' : 'rgba(255,255,255,.15)';
+});
+
+// Gallery picker
+document.getElementById('btn-gallery').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = evt => { stopCamera(); openReview(evt.target.result); };
+  reader.readAsDataURL(file);
+});
+
+// Review back
+document.getElementById('btn-review-back').addEventListener('click', () => { goTo('camera'); startCamera(); });
+
+// Raw text toggle
+document.getElementById('btn-raw-toggle').addEventListener('click', () => {
+  const box = document.getElementById('raw-text-box');
+  const btn = document.getElementById('btn-raw-toggle');
+  const visible = box.style.display !== 'none';
+  box.style.display = visible ? 'none' : 'block';
+  btn.textContent = visible ? 'Show raw OCR text' : 'Hide raw OCR text';
+});
+
+// Upload
+document.getElementById('btn-upload').addEventListener('click', async () => {
+  const vals = getFieldValues();
+  const btn = document.getElementById('btn-upload');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Uploading…';
+
+  if (!navigator.onLine) {
+    queueUpload(vals);
+    showResult(false, vals);
+    btn.disabled = false; btn.innerHTML = 'Upload to Sheet';
+    return;
+  }
+
+  try {
+    await appendToSheet(vals);
+    addToHistory(vals, 'success');
+    updateHistoryLabel();
+    showResult(true, vals);
+  } catch (e) {
+    if (e.message.includes('401') || e.message.includes('403')) {
+      snack('Session expired — please sign in again');
+      signOut();
+    } else {
+      queueUpload(vals);
+      showResult(false, vals);
+    }
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg> Upload to Sheet';
+});
+
+document.getElementById('btn-rescan').addEventListener('click', () => { goTo('camera'); startCamera(); });
+document.getElementById('btn-discard').addEventListener('click', () => goTo('home'));
+
+// Result screen
+document.getElementById('btn-scan-another').addEventListener('click', () => { goTo('camera'); startCamera(); });
+document.getElementById('btn-go-home').addEventListener('click', () => goTo('home'));
+document.getElementById('btn-view-history').addEventListener('click', () => { renderHistory(); goTo('history'); });
+
+// Config
+document.getElementById('btn-nav-config').addEventListener('click', () => { renderConfigScreen(); goTo('config'); });
+document.getElementById('btn-config-back').addEventListener('click', () => goTo('home'));
+document.getElementById('btn-add-mapping').addEventListener('click', () => {
+  state.config.mappings.push({ label: '', column: String.fromCharCode(65 + state.config.mappings.length), keyword: '' });
+  renderMappings();
+});
+document.getElementById('btn-config-save').addEventListener('click', () => {
+  state.config.spreadsheetId = document.getElementById('cfg-sheet-id').value.trim();
+  state.config.sheetName = document.getElementById('cfg-sheet-name').value.trim() || 'Sheet1';
+  saveConfig(); updateHomeUI(); goTo('home');
+  snack('✓ Configuration saved');
+});
+document.getElementById('btn-verify').addEventListener('click', async () => {
+  const id = document.getElementById('cfg-sheet-id').value.trim();
+  const result = document.getElementById('verify-result');
+  if (!id) { result.textContent = 'Enter a spreadsheet ID first'; return; }
+  if (!state.accessToken) { result.textContent = 'Sign in first to verify'; return; }
+  result.textContent = 'Verifying…'; result.style.color = 'var(--gray400)';
+  try {
+    const info = await verifySpreadsheet(id);
+    result.textContent = `✓ Found: "${info.properties.title}" (${info.sheets.length} sheet(s))`;
+    result.style.color = 'var(--green)';
+    if (info.sheets.length) document.getElementById('cfg-sheet-name').value = info.sheets[0].properties.title;
+  } catch {
+    result.textContent = '✗ Not found. Check the ID and that you have access.';
+    result.style.color = 'var(--red)';
+  }
+});
+
+// History
+document.getElementById('btn-nav-history').addEventListener('click', () => { renderHistory(); goTo('history'); });
+document.getElementById('btn-history-back').addEventListener('click', () => goTo('home'));
+document.getElementById('btn-clear-history').addEventListener('click', () => {
+  if (confirm('Clear all scan history?')) {
+    state.history = []; saveHistory(); renderHistory(); updateHistoryLabel();
+  }
+});
+
+// Sync
+document.getElementById('btn-sync').addEventListener('click', syncQueue);
+
+// ══════════════════════════════════════════════════════════
+// RESULT SCREEN HELPER
+// ══════════════════════════════════════════════════════════
+function showResult(uploaded, fieldValues) {
+  const icon = document.getElementById('result-icon-wrap');
+  const svg = document.getElementById('result-icon-svg');
+  const title = document.getElementById('result-title');
+  const sub = document.getElementById('result-sub');
+
+  if (uploaded) {
+    icon.className = 'result-icon success';
+    svg.style.fill = 'var(--green)';
+    svg.innerHTML = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>';
+    title.textContent = 'Uploaded!';
+    sub.textContent = `Row added to "${state.config.sheetName}" successfully.`;
+  } else {
+    icon.className = 'result-icon queued';
+    svg.style.fill = 'var(--amber)';
+    svg.innerHTML = '<path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"/>';
+    title.textContent = 'Saved Offline';
+    sub.textContent = 'No internet connection. Data saved and will upload automatically when online.';
+  }
+  goTo('result');
+}
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
+(function init() {
+  const isCallback = handleOAuthCallback();
+  if (!isCallback) {
+    const hasToken = loadStoredToken();
+    if (!hasToken) showSignInOverlay();
+    else { hideSignInOverlay(); fetchUserInfo(); }
+  }
+  updateHomeUI();
+
+  // Auto-sync on connection restore
+  window.addEventListener('online', () => { snack('Back online — syncing…'); setTimeout(syncQueue, 1500); });
+
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
