@@ -611,13 +611,15 @@ async function runOCR(imageDataUrl) {
   try {
     const worker = await Tesseract.createWorker('eng', 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-      langPath: 'https://cdn.jsdelivr.net/npm/tesseract.js-lang@4.0.0',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
       logger: m => {
         if (m.status === 'recognizing text')
           setOcrStatus('Reading text… ' + Math.round(m.progress * 100) + '%', true);
         else if (m.status === 'loading language traineddata')
           setOcrStatus('Loading OCR model…', true);
+        else if (m.status === 'initializing tesseract')
+          setOcrStatus('Starting OCR engine…', true);
       }
     });
     setOcrStatus('Extracting text from image…', true);
